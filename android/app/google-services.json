@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "295235651509",
+    "project_id": "estudiar-543ab",
+    "storage_bucket": "estudiar-543ab.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:295235651509:android:5b489376afcd0e5372bbfc",
+        "android_client_info": {
+          "package_name": "com.estudiar.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "295235651509-qd9iitecogq7num7m0vuj0g70qvff0ob.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDR5HiAqZMNAUJGVcGKOXzyo5vXPjyRaU0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "295235651509-qd9iitecogq7num7m0vuj0g70qvff0ob.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "295235651509-0ig2688001kis605ud2bsjcn09t7pijc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.estudiar.estudiar"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,335 @@
+================================================================================
+ESTUDIAR — APP DE GESTIÓN DE EVALUACIONES CON IA Y RED SOCIAL DE ESTUDIANTES
+Desarrollado con Flutter/Dart + Groq API + Firebase (Cloud Firestore)
+VERSIÓN: AUTENTICACIÓN CUSTOM + RED SOCIAL + MENSAJERÍA + ACTUALIZACIONES OTA
+================================================================================
+
+DESCRIPCIÓN GENERAL
+-------------------
+App mobile educativa desarrollada en Flutter/Dart para Android, orientada a
+estudiantes universitarios y secundarios. El concepto es "de un estudiante,
+para estudiantes". Permite gestionar evaluaciones, generar resúmenes con IA,
+estudiar con flashcards, practicar con modo examen y planificar el estudio
+automáticamente con inteligencia artificial. Desde la versión anterior se
+sumó una capa completa de cuenta de usuario (login con dispositivo vinculado
+y panel de administración), una red social interna entre estudiantes (feed,
+perfiles, follows) y mensajería directa, además de actualizaciones forzadas
+por versión y detección real de conectividad.
+
+TECNOLOGÍA
+----------
+- Mobile: Flutter/Dart (SDK >=3.2.0, Flutter >=3.16.0), versión app 1.0.0+1
+- Base de datos local: Hive (evaluaciones, settings, consentimiento legal,
+  historial de estudio) con adaptador generado por build_runner
+- Base de datos remota: Cloud Firestore (usuarios, red social, mensajería,
+  configuración de versión mínima). NO se usa Firebase Auth ni Storage.
+- State management: Riverpod 2.x (AsyncNotifier + Notifier)
+- IA texto: Groq API — llama-3.3-70b-versatile
+- IA visión: Groq API — meta-llama/llama-4-scout-17b-16e-instruct
+- IA moderación: Groq API (segunda capa opcional sobre el filtro local)
+- Navegación: MaterialApp + Navigator nativo (go_router sigue en pubspec.yaml
+  pero no se usa activamente)
+- Notificaciones: flutter_local_notifications + timezone (parcialmente
+  implementado, ver PENDIENTES)
+- Seguridad: flutter_secure_storage + crypto (SHA-256 + salt) + encrypt (AES)
+- Imágenes: image_picker (avatares) + file_picker (adjuntos de material)
+- Conectividad: device_info_plus, polling DNS propio
+- Distribución: package_info_plus + url_launcher para actualización OTA vía APK
+- Package ID Android: com.estudiar.app
+
+CARACTERÍSTICAS PRINCIPALES
+---------------------------
+
+1. AUTENTICACIÓN Y CUENTAS (NUEVO)
+   • Login custom usuario/contraseña — NO usa Firebase Authentication
+   • Contraseñas con hash SHA-256 + salt aleatorio por usuario, guardadas
+     en Firestore (colección 'users'), no en Hive
+   • Vinculación a dispositivo: la cuenta queda atada al primer deviceId
+     (Android ID / identifierForVendor) que hace login; otro dispositivo
+     recibe error "deviceMismatch". El admin puede resetear el vínculo
+   • No hay autorregistro: "tu cuenta es creada por el administrador"
+   • Bootstrap automático del usuario admin al primer arranque si no existe,
+     con contraseña por --dart-define=ADMIN_BOOTSTRAP_PASSWORD o generada
+     al azar (impresa una sola vez en consola de debug)
+   • Migración automática de usuarios legacy (de una versión previa sin
+     Firestore) marcándolos con mustResetPassword
+   • watchAccountActive: si el admin desactiva o borra la cuenta mientras
+     el usuario sigue logueado, se fuerza el logout en vivo
+   • Panel de administración (AdminPanelScreen): alta/baja de usuarios,
+     asignar rol admin, activar/desactivar cuentas, resetear dispositivo
+   • Nota del propio código: esquema de auth "casero", recomendado migrar
+     a un proveedor real de autenticación en producción
+
+2. GESTIÓN DE EVALUACIONES (sin cambios de esquema)
+   • Alta, edición y eliminación de evaluaciones
+   • Tipos disponibles: Evaluación (escrita) y Oral
+   • Campos: materia, tipo, fecha, dificultad (1-5), peso (%), notas
+   • Marcado como completada con registro de racha de estudio
+   • Indicador de urgencia automático (≤3 días para la fecha)
+   • Persistencia completa en Hive con adaptador tipado
+
+3. HOME SCREEN
+   • Lista de evaluaciones pendientes ordenadas por fecha
+   • Sección de completadas separada
+   • Stats en tiempo real: pendientes, urgentes, completadas
+   • Banner de alerta para evaluaciones urgentes
+   • Frase motivacional diaria generada/rotada con asistencia de IA
+   • Racha de estudio con animación (🔥)
+   • Configuración de API key, horas de estudio y recordatorios
+
+4. CALENDARIO
+   • Calendario mensual con marcadores por evaluación
+   • Colores diferenciados: Evaluación, Oral, Completada, Urgente
+   • Lista de eventos del día seleccionado y contador de pendientes
+   • Navegación directa a edición desde el calendario
+
+5. MATERIAL E IA
+   • Pestaña Resumen: resumen estructurado (idea principal, conceptos
+     clave, desarrollo, conclusión, para el examen)
+   • Soporte de múltiples imágenes procesadas por IA de visión (base64)
+   • Soporte de archivos .txt y PDF
+   • Pestaña Chat con el material pegado
+   • Pestaña Cards: 5 flashcards de pregunta/respuesta por generación
+   • Pestaña Examen: 5 preguntas generadas por IA con evaluación 0-10 y
+     feedback + respuesta ideal
+   • Historial de resúmenes guardado localmente
+
+6. PLAN DE ESTUDIO CON IA
+   • Cronograma día por día según evaluaciones pendientes y horas
+     configuradas por el usuario
+   • Sesiones de 25-50 minutos, prioriza por urgencia y dificultad
+   • Pomodoro integrado y regeneración del plan con seed aleatorio
+
+7. POMODORO
+   • Tres modos (Enfoque 25 min, Descanso corto 5 min, Largo 15 min)
+   • Arco de progreso animado, contador de pomodoros de la sesión
+
+8. SISTEMA DE RACHA E HISTORIAL DE ESTUDIO
+   • Racha por evaluaciones completadas (streak_service, box 'settings')
+   • Historial de minutos estudiados por día en box Hive separada
+     ('study_history'), independiente de la racha, alimenta el gráfico
+     de progreso semanal (weekly_progress_chart)
+
+9. RED SOCIAL — TAB "COMUNIDAD" (NUEVO)
+   • Feed público de posts con contenido, tag de materia opcional, likes
+     (transaccionales) y comentarios
+   • Perfil de usuario: avatar, bio, contadores de seguidores/seguidos,
+     posts propios, seguir/dejar de seguir
+   • Edición de perfil: nombre, bio y avatar
+   • Sistema de follows con contadores denormalizados actualizados por
+     transacción Firestore (FieldValue.increment)
+   • Bloqueo de usuarios, bidireccional, corta también la mensajería
+   • Reportes de contenido con motivos predefinidos (acoso, odio, spam,
+     sexual, amenazas, otro) — quedan para revisión manual del admin,
+     no ocultan contenido automáticamente
+   • Moderación de contenido en dos capas: filtro local instantáneo
+     (insultos, odio, grooming, flood, y en contenido público también
+     teléfonos/emails/links) y, si hay API key de Groq configurada,
+     segunda pasada con LLM para acoso, grooming, amenazas, contenido
+     sexual o venta de exámenes. Si la IA falla o no hay key: fail-open
+     (el filtro local ya corrió)
+   • Avatares: Base64 directo en Firestore (no hay Firebase Storage
+     configurado), recorte a ~480px/calidad 70 con image_picker, límite
+     duro ~900KB (el doc de Firestore tiene tope de 1MB). Renderizar
+     siempre con avatarImageProvider(), que resuelve Base64 o URL http,
+     o null (mostrar iniciales)
+
+10. MENSAJERÍA DIRECTA — TAB "MENSAJES" (NUEVO)
+    • Requiere follow mutuo para poder escribir, revalidado en el
+      repositorio (no solo en la UI)
+    • Conversación con id determinístico usuarioA_usuarioB, contador de
+      no leídos por usuario, badge en la nav bar
+    • Envío transaccional: valida bloqueo mutuo, follow mutuo, longitud
+      máxima (4000) y moderación antes de escribir
+    • Búsqueda de usuarios por prefijo de username vía rango Firestore
+      (startAt/endAt con carácter  como cota superior)
+    • Bloquear/reportar usuario desde el propio chat
+
+11. ACTUALIZACIONES FORZADAS / OTA (NUEVO)
+    • La app se distribuye por APK directo, no por Play Store
+    • UpdateService compara el buildNumber local contra un doc remoto
+      app_config/version en Firestore (minBuildNumber, apkUrl)
+    • Si el build local es menor, el splash redirige a una pantalla
+      bloqueante (no se puede volver atrás) hasta descargar el APK nuevo
+      vía url_launcher
+    • Si falla la consulta (sin red), no bloquea la app: falla abierto
+
+12. CONECTIVIDAD OFFLINE (NUEVO)
+    • Detección de conexión real (no solo "wifi conectado"): polling
+      cada 5s con lookup DNS a one.one.one.one (Cloudflare)
+    • Banner visible avisando que las funciones de IA no están
+      disponibles sin conexión
+
+13. NOTIFICACIONES (parcialmente implementado)
+    • La configuración de frecuencia (cada hora, diario, semanal) se
+      guarda en Hive y tiene UI, pero el disparo real de notificaciones
+      está pendiente (ver PENDIENTES)
+
+14. CONSENTIMIENTO LEGAL
+    • Pantalla de términos y condiciones al primer inicio
+    • Persistencia del consentimiento en Hive (box 'legal_consent')
+
+ARQUITECTURA DE ARCHIVOS (lib/)
+--------------------------------
+core/
+├── auth/local_auth_service.dart          Auth custom, hash+salt, device
+│                                          binding, bootstrap admin
+├── legal/legal_consent_service.dart      Consentimiento (Hive box)
+├── repositories/
+│   ├── evaluation_repository.dart        IEvaluationRepository + impl Hive
+│   ├── messaging_repository.dart         Mensajes/conversaciones + validación
+│   ├── moderation_exceptions.dart        ContentRejectedException, etc.
+│   └── social_repository.dart            Posts, likes, comentarios, follows,
+│                                          bloqueos, reportes
+└── security/
+    ├── content_moderation_service.dart   Filtro local + IA (Groq)
+    ├── prompt_sanitizer.dart
+    └── secure_storage_service.dart       AES con IV aleatorio
+
+features/auth/presentation/
+├── admin_panel_screen.dart               CRUD de usuarios
+├── consent_screen.dart
+└── login_screen.dart                     Login usuario/contraseña
+
+models/
+├── app_user.dart                         Usuario + perfil social
+├── evaluation.dart / evaluation.g.dart   Modelo Hive (sin cambios)
+├── social/comment.dart, message.dart, post.dart, report.dart
+└── study_plan.dart                       StudyPlan, StudyDay, StudySession
+
+providers/
+├── connectivity_provider.dart            Fuente real de estado de conexión
+├── evaluations_provider.dart
+├── social_providers.dart                 Feed, follows, mensajes, perfil
+├── study_history_provider.dart
+└── study_plan_provider.dart
+
+screens/
+├── shell/main_shell.dart                 IndexedStack + 6 tabs + nav liquid
+├── home/home_screen.dart
+├── calendar/calendar_screen.dart
+├── plan/study_plan_screen.dart
+├── material/material_screen.dart         resumen/chat/cards/examen
+├── evaluation/add_evaluation_screen.dart
+├── splash/splash_screen.dart             check update → login → consentim.
+├── update/update_required_screen.dart    Pantalla bloqueante sin salida
+├── social/                               feed, profile, edit_profile,
+│                                          comments, new_post, follow_list
+└── messages/                             conversations, chat,
+                                           new_conversation
+
+services/
+├── ai_service.dart                       Groq API (texto + visión base64)
+├── connectivity_service.dart             Polling DNS cada 5s
+├── connectivity_provider.dart            LEGACY, re-export (pendiente borrar)
+├── flutter_local_notifications.dart      Stub, notificaciones no conectadas
+├── notification_service.dart             Flags en Hive, disparo real TODO
+├── storage_service.dart
+├── streak_service.dart                   Racha (Hive settings box)
+├── study_history_service.dart            Minutos estudiados por día
+├── summary_history_service.dart
+└── update_service.dart                   Chequeo de versión mínima
+
+utils/
+├── avatar_image.dart                     Resuelve avatar Base64/URL
+└── spaced_repetition_engine.dart         Algoritmo SM-2, CÓDIGO MUERTO
+
+widgets/
+├── glass_card.dart, evaluation_card.dart, pomodoro_widget.dart
+├── liquid_glass_nav_bar.dart             Nav flotante estilo liquid glass
+├── offline_banner.dart
+├── regenerate_plan_dialog.dart
+├── weekly_progress_chart.dart
+└── social/post_card.dart, report_dialog.dart
+
+DISEÑO UI
+---------
+- Tema: dark exclusivo, sin modo claro
+- Fondo: gradiente oscuro (0xFF0D0520 → 0xFF080D1C → negro)
+- Acento primario: púrpura #A855F7 · Acento secundario: cyan #06B6D4
+- Cards: GlassCard con BackdropFilter blur(12)
+- LiquidGlassNavBar: barra flotante (no bottomNavigationBar del Scaffold),
+  icon-only con label animado solo en el ítem seleccionado, avatar/inicial
+  del usuario a la izquierda, badge de mensajes no leídos, auto-hide en
+  scroll (reaparece al subir o cambiar de tab)
+- 6 tabs en MainShell: Calendario | Comunidad | Inicio (tab inicial,
+  al centro) | Mensajes | Plan | Material
+- IndexedStack + AnimatedSwitcher (fade 160ms) al cambiar de tab
+
+FLUJO TÍPICO DE USO
+--------------------
+1. Splash: chequeo de versión mínima → si corresponde, pantalla de
+   actualización obligatoria (bloqueante)
+2. Login con usuario/contraseña (cuenta creada por el admin)
+3. Primer inicio: pantalla de consentimiento legal
+4. Home: agregar evaluación con el FAB (+)
+5. En Material: pegar texto o subir fotos de apuntes, generar resumen,
+   flashcards, chatear o rendir el examen simulado
+6. En Plan: generar cronograma de estudio y usar Pomodoro
+7. En Comunidad: publicar, seguir compañeros, comentar y dar like
+8. En Mensajes: escribir a compañeros con follow mutuo
+9. Al completar una evaluación: se suma a la racha y al historial semanal
+
+ESTADO ACTUAL
+-------------
+- App funcional con todas las pantallas implementadas, incluidas auth,
+  red social, mensajería y actualización forzada
+- IA operativa: resumen, flashcards, chat, examen, plan de estudio,
+  frase motivacional, moderación de contenido
+- Firestore como backend de usuarios/social/mensajería; Hive para todo
+  lo local (evaluaciones, configuración, consentimiento, historial)
+
+PENDIENTES CONOCIDOS (detectados en el código)
+------------------------------------------------
+1. Notificaciones: scheduleReminder() y cancelAll() en
+   notification_service.dart están vacíos (TODO explícito) — la UI de
+   configuración existe pero no dispara notificaciones reales todavía
+2. lib/services/connectivity_provider.dart es un archivo legacy/duplicado
+   que solo re-exporta el provider real; queda pendiente eliminarlo y
+   actualizar los imports que lo referencian
+3. spaced_repetition_engine.dart (algoritmo SM-2) está completo pero no
+   tiene ningún caller — no está conectado a las flashcards de Material
+4. Reportes de contenido no ocultan nada automáticamente: falta un panel
+   de revisión de reportes para el admin (hoy solo se guardan en Firestore)
+5. Auth: esquema custom, documentado en el propio código como mitigación
+   temporal — pendiente evaluar migración a un proveedor de auth real
+6. API key de Groq hardcodeada en ai_service.dart — pendiente histórico
+   de moverla a un backend intermediario
+7. Navegación de retorno post-guardado y animación de teclado en
+   add_evaluation_screen (pendientes heredados de la versión anterior,
+   no confirmado si siguen vigentes)
+
+CONFIGURACIÓN Y DESPLIEGUE
+---------------------------
+- Compilación: flutter build apk --release
+- Package: com.estudiar.app
+- Hive boxes: legal_consent, evaluations, settings, study_history
+- Firestore: colecciones users, posts, comments, follows, blocks, reports,
+  conversations/messages, app_config
+- Adaptador Hive: dart run build_runner build
+- Localización: initializeDateFormatting('es')
+
+EQUIPO Y CRÉDITOS
+-----------------
+Desarrollado por Federico Villares (Fernando) con asistencia de Claude
+(Anthropic). Crédito en app: "Fede Villares" — de un estudiante, para
+estudiantes.
+
+NOTAS DE SEGURIDAD
+------------------
+- La API key de Groq está hardcodeada en ai_service.dart
+- Contraseñas con hash SHA-256 + salt por usuario (no en texto plano)
+- Cuentas vinculadas a dispositivo para dificultar el uso compartido
+- Avatares limitados a ~900KB por el límite de documento de Firestore
+- Realizar backups del proyecto y de Firestore regularmente
+
+SOPORTE Y DOCUMENTACIÓN
+------------------------
+- Groq API docs: https://console.groq.com/docs
+- Flutter docs: https://docs.flutter.dev
+- Hive docs: https://docs.hivedb.dev
+- Riverpod docs: https://riverpod.dev
+- Firestore docs: https://firebase.google.com/docs/firestore
+- table_calendar: https://pub.dev/packages/table_calendar
+
+================================================================================

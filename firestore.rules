@@ -1,0 +1,212 @@
+rules_version = '2';
+
+// ════════════════════════════════════════════════════════════════════
+// EstudIAr — Reglas de seguridad Firestore
+//
+// La app ahora usa Firebase Authentication (Email/Password) además de su
+// esquema propio de usuario/contraseña en Firestore. El email de Auth es
+// sintético (`<username>@estudiar.local`, ver LocalAuthService._authEmail),
+// pero el username sigue siendo la clave canónica en todo Firestore/Dart:
+// `myUsername()` lo deriva de `request.auth.token.email` acá abajo para
+// poder comparar contra los documentos.
+//
+// Cuentas "legacy" (creadas antes de esta migración) todavía pueden tener
+// `passwordHash`/`passwordSalt` en su doc de `users/{username}` hasta que
+// hacen su primer login exitoso post-migración (LocalAuthService.login()
+// las migra ahí mismo: crea la cuenta de Firebase Auth y borra esos dos
+// campos). Por eso existe el carve-out angosto y temporal en `users.update`
+// para el contador de intentos fallidos, que se escribe ANTES de que exista
+// sesión de Firebase Auth durante ese primer login.
+// ════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // El username es la parte local del email sintético de Firebase Auth
+    // (ver LocalAuthService._authEmail). Nunca llamar sin chequear
+    // isSignedIn() antes: con request.auth == null, .token no existe.
+    function myUsername() {
+      return request.auth.token.email.split('@')[0];
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(myUsername())).data.isAdmin == true;
+    }
+
+    // ── Usuarios ────────────────────────────────────────────────
+    match /users/{username} {
+      allow read: if true; // perfiles públicos (red social)
+
+      // Sin backend separado, el alta de usuarios ocurre desde el propio
+      // cliente (LocalAuthService.createUser / seedAdminIfNeeded). Para no
+      // dejar la puerta abierta a que cualquiera se autoasigne privilegios,
+      // se permite crear el documento SOLO si nace con:
+      //  - username == el id del documento (no puede falsear otra identidad)
+      //  - isActive = true (estado inicial esperado, no manipulable)
+      //  - isAdmin = false, EXCEPTO el único documento de id "admin"
+      //    (seedAdminIfNeeded corre una sola vez, cuando ese doc no existe
+      //    todavía; una vez creado, "allow create" deja de aplicar y nadie
+      //    puede volver a crearlo ni pisarlo).
+      //  - sin pisar un documento ya existente (resource == null: si el doc
+      //    no existe, "resource" es null y no tiene ".data" — comparar
+      //    "resource.data == null" siempre fallaba con error de evaluación,
+      //    lo que Firestore trata como denegación, bloqueando TODA alta)
+      allow create: if resource == null
+        && request.resource.data.username == username
+        && request.resource.data.isActive == true
+        && (request.resource.data.isAdmin == false || username == 'admin');
+
+      allow update: if
+        (
+          // (1) El propio usuario autenticado editando su perfil. Puede
+          // borrar (no setear) passwordHash/passwordSalt — es lo que hace
+          // login() al completar la migración lazy de una cuenta legacy;
+          // nunca puede dejarlos con un valor nuevo, ni tocar isAdmin/username.
+          isSignedIn() && myUsername() == username &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['isAdmin', 'username']) &&
+          !('passwordHash' in request.resource.data.keys()) &&
+          !('passwordSalt' in request.resource.data.keys())
+        ) || (
+          // (2) Admin autenticado (panel de admin): mismos campos protegidos,
+          // sin la excepción de borrado de password (el admin no gestiona
+          // migraciones de contraseña de otros usuarios).
+          isAdmin() &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['passwordHash', 'passwordSalt', 'isAdmin', 'username'])
+        ) || (
+          // (3) Carve-out angosto y temporal: LocalAuthService.login()
+          // todavía no tiene sesión de Firebase Auth cuando actualiza el
+          // contador de intentos fallidos de un usuario legacy (doc que
+          // TODAVÍA tiene passwordHash, o sea que aún no migró). Deja de
+          // aplicar para ese usuario apenas migra (passwordHash desaparece
+          // del doc en su primer login exitoso).
+          resource.data.passwordHash is string && resource.data.passwordHash.size() > 0 &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['failedAttempts', 'lockedUntil'])
+        );
+
+      // El panel de admin necesita poder eliminar usuarios. El doc "admin"
+      // nunca debe poder borrarse.
+      allow delete: if isAdmin() && username != 'admin';
+    }
+
+    // ── Posts del feed ──────────────────────────────────────────
+    match /posts/{postId} {
+      allow read: if resource.data.isHidden != true;
+      allow create: if isSignedIn() && myUsername() == request.resource.data.authorId
+        && request.resource.data.keys().hasAll(['authorId', 'content', 'createdAt'])
+        && request.resource.data.content is string
+        && request.resource.data.content.size() <= 2000
+        && request.resource.data.content.size() > 0;
+      allow update: if
+        // Solo contadores de likes/comentarios o flags de moderación,
+        // nunca cambiar autor o contenido ya publicado vía edición directa.
+        request.resource.data.authorId == resource.data.authorId
+        && ((isSignedIn() && myUsername() == resource.data.authorId) || isAdmin());
+      allow delete: if (isSignedIn() && myUsername() == resource.data.authorId) || isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn() && myUsername() == request.resource.data.authorId
+          && request.resource.data.keys().hasAll(['authorId', 'content', 'createdAt'])
+          && request.resource.data.content.size() <= 1000
+          && request.resource.data.content.size() > 0;
+        allow update, delete: if
+          (isSignedIn() && myUsername() == resource.data.authorId) || isAdmin();
+      }
+
+      match /likes/{userId} {
+        allow read: if true;
+        // El id del doc es el username del que likea, 1 like por usuario.
+        allow write: if isSignedIn() && myUsername() == userId;
+      }
+    }
+
+    // ── Relaciones de seguimiento ───────────────────────────────
+    match /follows/{followId} {
+      allow read: if true;
+      allow create: if isSignedIn() && myUsername() == request.resource.data.followerId
+        && request.resource.data.keys().hasAll(['followerId', 'followingId']);
+      allow delete: if isSignedIn() && myUsername() == resource.data.followerId;
+      allow update: if false;
+    }
+
+    // ── Bloqueos entre usuarios ─────────────────────────────────
+    match /blocks/{blockId} {
+      allow read: if true;
+      allow create: if isSignedIn() && myUsername() == request.resource.data.blockerId;
+      allow delete: if isSignedIn() && myUsername() == resource.data.blockerId;
+      allow update: if false;
+    }
+
+    // ── Conversaciones y mensajes directos ──────────────────────
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() && myUsername() in resource.data.participants;
+      allow create: if isSignedIn() && myUsername() in request.resource.data.participants
+        && request.resource.data.keys().hasAll(['participants', 'createdAt'])
+        && request.resource.data.participants.size() == 2;
+      allow update: if isSignedIn() && myUsername() in resource.data.participants;
+      // Antes esto era "if false" pese a que MessagingRepository.deleteConversation()
+      // llama a .delete() (bug preexistente, no relacionado con auth) — se
+      // aprovecha esta reescritura para dejarlo funcionar de verdad.
+      allow delete: if isSignedIn() && myUsername() in resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && myUsername() in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if isSignedIn() && myUsername() == request.resource.data.senderId
+          && myUsername() in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+          && request.resource.data.keys().hasAll(['senderId', 'content', 'createdAt'])
+          && request.resource.data.content.size() <= 4000
+          && request.resource.data.content.size() > 0;
+        allow update: if isSignedIn()
+          && myUsername() in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['isModerated', 'moderationReason', 'readAt']);
+        allow delete: if (isSignedIn()
+          && myUsername() in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants)
+          || isAdmin();
+      }
+    }
+
+    // ── Config remota de versión (force-update) ──────────────────
+    // Doc único app_config/version, leído por UpdateService al arrancar
+    // la app. Solo lectura pública; se edita a mano desde la consola de
+    // Firebase, nunca desde el cliente.
+    //
+    // Doc app_config/shared_ai_key: guarda CIFRADA (nunca en texto plano)
+    // la API key de Groq compartida por todas las instalaciones — ver
+    // SharedAiKeyService. A diferencia de "version", este SÍ se escribe
+    // desde el cliente (panel de admin). La forma queda restringida a
+    // {ciphertext, iv, updatedAt} para que nunca se pueda colar la key en
+    // texto plano ni ningún otro campo, y ahora además exige ser admin
+    // autenticado.
+    match /app_config/{doc} {
+      allow read: if true;
+      allow write: if doc == 'shared_ai_key'
+        && isAdmin()
+        && request.resource.data.keys().hasOnly(['ciphertext', 'iv', 'updatedAt'])
+        && request.resource.data.ciphertext is string
+        && request.resource.data.iv is string;
+    }
+
+    // ── Reportes de contenido/usuarios ───────────────────────────
+    match /reports/{reportId} {
+      allow read: if false; // solo el panel admin (vía backend) debería leerlos
+      allow create: if isSignedIn() && myUsername() == request.resource.data.reporterId
+        && request.resource.data.keys().hasAll(['reporterId', 'targetType', 'targetId', 'reason', 'createdAt']);
+      allow update, delete: if false;
+    }
+
+    // ── Catch-all: denegar todo lo no contemplado explícitamente ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

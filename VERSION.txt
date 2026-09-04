@@ -1,0 +1,35 @@
+================================================================================
+ESTUDIAR — HISTORIAL DE VERSIONES
+================================================================================
+Instrucciones: cada vez que agregues una funcionalidad o cambio importante,
+sumá una entrada nueva ARRIBA de esta línea con fecha y versión. No borres
+las versiones anteriores: esto es el historial completo del proyecto.
+Nota: este proyecto ya lleva un informe técnico detallado en INFORME.txt
+(se actualiza en cada cambio grande) — usalo como referencia completa.
+================================================================================
+
+--------------------------------------------------------------------------------
+v1.0 — versión base
+--------------------------------------------------------------------------------
+Funciones base:
+- Gestión de evaluaciones escolares/universitarias.
+- Generación de resúmenes con IA (Groq API, texto y visión).
+- Flashcards para estudiar y modo examen.
+- Planificación de estudio automática con IA.
+- Persistencia local con Hive (evaluaciones, settings, consentimiento
+  legal, historial).
+
+Stack: Flutter/Dart + Groq API + Firebase (Cloud Firestore).
+
+--------------------------------------------------------------------------------
+v2.0 — Autenticación custom + red social + mensajería + actualizaciones OTA
+--------------------------------------------------------------------------------
+- Login custom (usuario/contraseña, hash SHA-256 + salt), sin Firebase Auth.
+- Cuentas vinculadas a dispositivo, panel de administración de usuarios.
+- Red social interna entre estudiantes: feed, perfiles, follows.
+- Mensajería directa.
+- Actualizaciones forzadas por versión mínima + distribución OTA vía APK.
+- Detección real de conectividad.
+
+Ver INFORME.txt para el detalle técnico completo (arquitectura, pantallas,
+pendientes conocidos).

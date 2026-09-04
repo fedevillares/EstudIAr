@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EstudIAr — De un estudiante, para estudiantes</title>
+<style>
+  :root{
+    --purple:#A855F7;
+    --cyan:#06B6D4;
+    --bg-0:#0D0520;
+    --bg-1:#080D1C;
+    --bg-2:#000000;
+    --text-dim: rgba(255,255,255,0.45);
+    --text-faint: rgba(255,255,255,0.25);
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+
+  html,body{
+    background:var(--bg-2);
+    color:#fff;
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow-x:hidden;
+    scroll-behavior:smooth;
+  }
+
+  /* ───────────────────────── HERO CINEMÁTICO ───────────────────────── */
+  .hero{
+    position:relative;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    isolation:isolate;
+  }
+
+  .hero-bg{
+    position:absolute;
+    inset:0;
+    z-index:-3;
+    background:linear-gradient(135deg, var(--bg-0) 0%, var(--bg-1) 55%, var(--bg-2) 100%);
+  }
+
+  /* grano cinemático sutil para que no se vea "plano" */
+  .hero-grain{
+    position:absolute;
+    inset:0;
+    z-index:-1;
+    opacity:0.05;
+    background-image:
+      repeating-radial-gradient(circle at 20% 30%, #fff 0, transparent 1px, transparent 3px),
+      repeating-radial-gradient(circle at 70% 80%, #fff 0, transparent 1px, transparent 4px);
+    mix-blend-mode:overlay;
+    pointer-events:none;
+  }
+
+  .orb{
+    position:absolute;
+    border-radius:50%;
+    filter:blur(2px);
+    z-index:-2;
+    pointer-events:none;
+  }
+  .orb-1{
+    width:520px; height:520px;
+    top:-180px; left:50%;
+    transform:translateX(-50%);
+    background:radial-gradient(circle, rgba(168,85,247,0.30), transparent 70%);
+    animation: drift1 14s ease-in-out infinite;
+  }
+  .orb-2{
+    width:380px; height:380px;
+    bottom:-120px; right:-80px;
+    background:radial-gradient(circle, rgba(6,182,212,0.22), transparent 70%);
+    animation: drift2 18s ease-in-out infinite;
+  }
+  .orb-3{
+    width:240px; height:240px;
+    bottom:10%; left:-60px;
+    background:radial-gradient(circle, rgba(168,85,247,0.18), transparent 70%);
+    animation: drift3 22s ease-in-out infinite;
+  }
+
+  @keyframes drift1{
+    0%,100%{ transform:translate(-50%,0) scale(1); }
+    50%{ transform:translate(-46%,30px) scale(1.08); }
+  }
+  @keyframes drift2{
+    0%,100%{ transform:translate(0,0) scale(1); }
+    50%{ transform:translate(-30px,-25px) scale(1.1); }
+  }
+  @keyframes drift3{
+    0%,100%{ transform:translate(0,0) scale(1); }
+    50%{ transform:translate(20px,-15px) scale(0.95); }
+  }
+
+  /* estrellas/partículas flotantes */
+  .stars{
+    position:absolute;
+    inset:0;
+    z-index:-2;
+    pointer-events:none;
+  }
+  .star{
+    position:absolute;
+    width:3px; height:3px;
+    background:#fff;
+    border-radius:50%;
+    opacity:0.5;
+    animation:twinkle 3.5s ease-in-out infinite;
+  }
+  @keyframes twinkle{
+    0%,100%{ opacity:0.15; }
+    50%{ opacity:0.8; }
+  }
+
+  .hero-content{
+    position:relative;
+    z-index:5;
+    text-align:center;
+    padding:0 24px;
+    max-width:900px;
+  }
+
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 18px;
+    border-radius:999px;
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.12);
+    backdrop-filter:blur(12px);
+    font-size:13px;
+    color:var(--text-dim);
+    margin-bottom:32px;
+    opacity:0;
+    animation:fadeUp 0.8s ease forwards;
+    animation-delay:0.1s;
+  }
+  .badge .dot{
+    width:6px; height:6px; border-radius:50%;
+    background:linear-gradient(135deg,var(--purple),var(--cyan));
+    box-shadow:0 0 8px var(--purple);
+  }
+
+  .hero-title{
+    font-size:clamp(48px, 9vw, 96px);
+    font-weight:800;
+    line-height:1.05;
+    letter-spacing:-1px;
+    background:linear-gradient(135deg,#fff 30%, var(--purple) 70%, var(--cyan) 100%);
+    background-size:200% 200%;
+    -webkit-background-clip:text;
+    background-clip:text;
+    -webkit-text-fill-color:transparent;
+    animation:fadeUp 1s ease forwards, shimmer 6s ease-in-out infinite;
+    opacity:0;
+    animation-delay:0.25s, 1.2s;
+  }
+
+  @keyframes shimmer{
+    0%,100%{ background-position:0% 50%; }
+    50%{ background-position:100% 50%; }
+  }
+
+  .hero-subtitle{
+    margin-top:22px;
+    font-size:clamp(16px, 2.4vw, 22px);
+    color:var(--text-dim);
+    font-weight:400;
+    opacity:0;
+    animation:fadeUp 1s ease forwards;
+    animation-delay:0.45s;
+  }
+
+  .hero-cta{
+    margin-top:42px;
+    display:flex;
+    gap:16px;
+    justify-content:center;
+    flex-wrap:wrap;
+    opacity:0;
+    animation:fadeUp 1s ease forwards;
+    animation-delay:0.65s;
+  }
+
+  /* ── Botón estilo "liquid glass" (vidrio líquido tipo Apple) ── */
+  .btn{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    padding:16px 32px;
+    border-radius:999px;
+    font-size:15px;
+    font-weight:600;
+    text-decoration:none;
+    color:#fff;
+    cursor:pointer;
+    border:none;
+    overflow:hidden;
+    transition:transform 0.35s cubic-bezier(.2,.9,.3,1.3), box-shadow 0.35s ease;
+  }
+  .btn:hover{ transform:translateY(-3px); }
+  .btn:active{ transform:translateY(-1px) scale(0.98); }
+
+  .btn-primary{
+    background:linear-gradient(135deg, var(--purple), var(--cyan));
+    box-shadow:0 8px 30px rgba(168,85,247,0.35), 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .btn-primary:hover{
+    box-shadow:0 14px 40px rgba(168,85,247,0.5), 0 4px 14px rgba(0,0,0,0.5);
+  }
+  .btn-primary::before{
+    content:'';
+    position:absolute;
+    top:0; left:-60%;
+    width:40%; height:100%;
+    background:linear-gradient(120deg, transparent, rgba(255,255,255,0.5), transparent);
+    transform:skewX(-20deg);
+    animation:sheen 3.2s ease-in-out infinite;
+  }
+  @keyframes sheen{
+    0%{ left:-60%; }
+    40%{ left:140%; }
+    100%{ left:140%; }
+  }
+
+  /* liquid glass: blur fuerte + highlight especular interno, sombra afuera */
+  .btn-glass{
+    background:rgba(255,255,255,0.06);
+    backdrop-filter:blur(20px) saturate(160%);
+    -webkit-backdrop-filter:blur(20px) saturate(160%);
+    border:1px solid rgba(255,255,255,0.22);
+  }
+  .btn-glass::after{
+    content:'';
+    position:absolute;
+    top:0; left:0; right:0; height:50%;
+    background:linear-gradient(to bottom, rgba(255,255,255,0.22), transparent);
+    border-radius:999px 999px 0 0;
+    pointer-events:none;
+  }
+  .btn-glass:hover{
+    background:rgba(255,255,255,0.1);
+    border-color:rgba(255,255,255,0.32);
+  }
+
+  @keyframes fadeUp{
+    from{ opacity:0; transform:translateY(24px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+
+  /* mockup flotante del teléfono */
+  .phone-wrap{
+    margin-top:80px;
+    position:relative;
+    opacity:0;
+    animation:fadeUp 1.2s ease forwards;
+    animation-delay:0.9s;
+  }
+  .phone{
+    width:230px;
+    height:470px;
+    border-radius:36px;
+    background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border:1px solid rgba(255,255,255,0.15);
+    backdrop-filter:blur(16px);
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.05) inset,
+      0 60px 120px rgba(168,85,247,0.18);
+    animation:floaty 6s ease-in-out infinite;
+    position:relative;
+    overflow:hidden;
+  }
+  .phone-screen{
+    position:absolute;
+    inset:8px;
+    border-radius:28px;
+    background:linear-gradient(160deg, var(--bg-0), var(--bg-2));
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+  }
+  .phone-logo{
+    font-size:22px;
+    font-weight:800;
+    background:linear-gradient(135deg,var(--purple),var(--cyan));
+    -webkit-background-clip:text;
+    background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+  .phone-bars{
+    display:flex;
+    gap:6px;
+    margin-top:14px;
+  }
+  .phone-bars span{
+    width:34px; height:6px; border-radius:4px;
+    background:rgba(255,255,255,0.08);
+  }
+  .phone-bars span:nth-child(1){ background:rgba(168,85,247,0.5); }
+
+  @keyframes floaty{
+    0%,100%{ transform:translateY(0) rotate(0deg); }
+    50%{ transform:translateY(-18px) rotate(1.5deg); }
+  }
+
+  .scroll-hint{
+    position:absolute;
+    bottom:32px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:12px;
+    color:var(--text-faint);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:8px;
+    opacity:0;
+    animation:fadeUp 1s ease forwards;
+    animation-delay:1.3s;
+  }
+  .scroll-hint .line{
+    width:1px; height:32px;
+    background:linear-gradient(to bottom, rgba(255,255,255,0.4), transparent);
+    animation:scrollLine 2s ease-in-out infinite;
+  }
+  @keyframes scrollLine{
+    0%{ transform:scaleY(0.3); opacity:0.3; }
+    50%{ transform:scaleY(1); opacity:1; }
+    100%{ transform:scaleY(0.3); opacity:0.3; }
+  }
+
+  /* ───────────────────────── FEATURES ───────────────────────── */
+  .features{
+    position:relative;
+    padding:120px 24px;
+    background:var(--bg-2);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:64px;
+  }
+  .features-title{
+    font-size:clamp(28px,4vw,42px);
+    font-weight:700;
+    text-align:center;
+    max-width:600px;
+  }
+  .features-title span{
+    background:linear-gradient(135deg,var(--purple),var(--cyan));
+    -webkit-background-clip:text;
+    background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+    gap:24px;
+    max-width:1100px;
+    width:100%;
+  }
+  .card{
+    padding:32px;
+    border-radius:24px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.08);
+    backdrop-filter:blur(10px);
+    transition:transform 0.4s ease, border-color 0.4s ease, background 0.4s ease;
+  }
+  .card:hover{
+    transform:translateY(-6px);
+    border-color:rgba(168,85,247,0.35);
+    background:rgba(255,255,255,0.05);
+  }
+  .card-icon{
+    width:48px; height:48px;
+    border-radius:14px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:22px;
+    margin-bottom:18px;
+    background:linear-gradient(135deg, rgba(168,85,247,0.25), rgba(6,182,212,0.18));
+  }
+  .card h3{
+    font-size:18px;
+    margin-bottom:10px;
+  }
+  .card p{
+    font-size:14px;
+    color:var(--text-dim);
+    line-height:1.6;
+  }
+
+  /* ───────────────────────── FOOTER CTA ───────────────────────── */
+  .final-cta{
+    padding:140px 24px;
+    text-align:center;
+    background:radial-gradient(circle at 50% 0%, rgba(168,85,247,0.12), transparent 60%);
+  }
+  .final-cta h2{
+    font-size:clamp(30px,5vw,52px);
+    font-weight:800;
+    margin-bottom:20px;
+  }
+  .final-cta p{
+    color:var(--text-dim);
+    margin-bottom:36px;
+    font-size:16px;
+  }
+  footer{
+    text-align:center;
+    padding:32px;
+    color:var(--text-faint);
+    font-size:13px;
+  }
+
+  @media (max-width:600px){
+    .phone{ width:190px; height:390px; }
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grain"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="stars" id="stars"></div>
+
+  <div class="hero-content">
+    <div class="badge">
+      <span class="dot"></span>
+      Hecho por un estudiante, para estudiantes
+    </div>
+    <h1 class="hero-title">EstudIAr</h1>
+    <p class="hero-subtitle">
+      Organizá tu estudio, conectá con tu comunidad y dejá que la IA<br>
+      te ayude a llegar mejor preparado a cada examen.
+    </p>
+    <div class="hero-cta">
+      <a href="#" class="btn btn-primary">⚡ Empezar ahora</a>
+      <a href="#features" class="btn btn-glass">Ver qué incluye</a>
+    </div>
+
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-logo">EstudIAr</div>
+          <div class="phone-bars">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-hint">
+    <span>Descubrí más</span>
+    <div class="line"></div>
+  </div>
+</section>
+
+<section class="features" id="features">
+  <h2 class="features-title">Todo tu <span>estudio</span> y tu <span>comunidad</span>, en un solo lugar</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="card-icon">👥</div>
+      <h3>Comunidad real</h3>
+      <p>Compartí avances, dudas y apuntes con otros estudiantes. Moderación activa para que sea un espacio seguro.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">💬</div>
+      <h3>Mensajes directos</h3>
+      <p>Hablá uno a uno con tus compañeros de estudio, sin salir de la app.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📅</div>
+      <h3>Calendario inteligente</h3>
+      <p>Organizá evaluaciones y entregas, con recordatorios que se adaptan a tu ritmo.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">✨</div>
+      <h3>Plan de estudio con IA</h3>
+      <p>Generá un plan personalizado según tus materias, tiempos y objetivos.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📚</div>
+      <h3>Material centralizado</h3>
+      <p>Todos tus recursos y apuntes ordenados, accesibles desde cualquier dispositivo.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔒</div>
+      <h3>Seguridad primero</h3>
+      <p>Tus datos y conversaciones protegidos con buenas prácticas de seguridad en cada capa.</p>
+    </div>
+  </div>
+</section>
+
+<section class="final-cta">
+  <h2>Tu próximo examen empieza acá</h2>
+  <p>Sumate a EstudIAr y estudiá de una forma más conectada.</p>
+  <a href="#" class="btn btn-primary">⚡ Crear mi cuenta</a>
+</section>
+
+<footer>
+  EstudIAr — De un estudiante, para estudiantes. By Fede Villares.
+</footer>
+
+<script>
+  // Generamos un campo de estrellas titilantes, distribuidas al azar.
+  const starsContainer = document.getElementById('stars');
+  const STAR_COUNT = 60;
+  for (let i = 0; i < STAR_COUNT; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    star.style.left = Math.random() * 100 + '%';
+    star.style.top = Math.random() * 100 + '%';
+    star.style.animationDelay = (Math.random() * 3.5) + 's';
+    star.style.width = star.style.height = (Math.random() * 2 + 1.5) + 'px';
+    starsContainer.appendChild(star);
+  }
+
+  // Parallax sutil de los orbes según el scroll, para sensación cinemática.
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    document.querySelectorAll('.orb').forEach((orb, i) => {
+      orb.style.transform += ` translateY(${y * 0.05 * (i + 1)}px)`;
+    });
+  }, { passive: true });
+</script>
+
+</body>
+</html>
