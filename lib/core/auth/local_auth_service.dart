@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:hive/hive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import '../../models/app_user.dart';
 export '../../models/app_user.dart' show LoginResult;
@@ -35,13 +34,6 @@ class LocalAuthService {
       sha256.convert(utf8.encode('$salt:$password')).toString();
 
   static String _normalize(String username) => username.trim().toLowerCase();
-
-  // Firebase Auth (Email/Password) necesita un email; el username sigue
-  // siendo la clave canónica en Firestore, este email sintético solo
-  // existe para satisfacer al proveedor de Auth y nunca se muestra en la
-  // UI ni se usa en ningún otro lado.
-  static String _authEmail(String normalizedUsername) =>
-      '$normalizedUsername@estudiar.local';
 
   static Future<String> getDeviceId() async {
     try {
@@ -84,9 +76,12 @@ class LocalAuthService {
       final password = _bootstrapPassword.isNotEmpty
           ? _bootstrapPassword
           : _generateSalt(10);
+      final salt = _generateSalt();
 
       await _firestore.collection(_usersCollection).doc('admin').set({
         'username': 'admin',
+        'passwordHash': _hashWithSalt(password, salt),
+        'passwordSalt': salt,
         'isActive': true,
         'isAdmin': true,
         'deviceId': null,
@@ -100,31 +95,13 @@ class LocalAuthService {
         'isBlockedGlobally': false,
       });
 
-      // La cuenta de Firebase Auth es la que realmente guarda la
-      // credencial a partir de acá; el doc de Firestore ya no lleva
-      // passwordHash/passwordSalt para usuarios creados de cero.
-      try {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _authEmail('admin'),
-          password: password,
-        );
-        await FirebaseAuth.instance.signOut();
-      } catch (e) {
-        // No debe romper el arranque de la app: si esto falla (ej. el
-        // proveedor Email/Password todavía no está habilitado en la
-        // consola de Firebase), el admin queda creado en Firestore igual
-        // y puede reintentarse manualmente más adelante.
-        debugPrint('[auth] Error creando cuenta Auth del admin: $e');
-      }
-
-      if (_bootstrapPassword.isEmpty && kDebugMode) {
-        // Solo en debug: en release nunca debe quedar una password en
-        // texto plano en logcat/consola, aunque sea la de bootstrap.
+      if (_bootstrapPassword.isEmpty) {
         // ignore: avoid_print
         print('[setup] Admin creado. Password temporal (guardala ya): $password');
       }
     } catch (e) {
-      debugPrint('[auth] Error seedAdminIfNeeded: ${e.runtimeType}');
+      // ignore: avoid_print
+      print('[auth] Error seedAdminIfNeeded: ${e.runtimeType}');
     }
   }
 
@@ -157,7 +134,8 @@ class LocalAuthService {
       // hashes sin salt dando vueltas en almacenamiento local.
       await Hive.box('settings').delete('users');
     } catch (e) {
-      debugPrint('[auth] Error en migración: ${e.runtimeType}');
+      // ignore: avoid_print
+      print('[auth] Error en migración: ${e.runtimeType}');
     }
   }
 
@@ -187,55 +165,11 @@ class LocalAuthService {
         return LoginResult.tooManyAttempts;
       }
 
-      // Doc "legacy" (tiene passwordHash propio, todavía no migrado a
-      // Firebase Auth) vs. doc "nuevo estilo" (la credencial vive
-      // únicamente en Firebase Auth). Se verifica con el método que
-      // corresponda; el resultado (contador de intentos, lockout, etc.)
-      // se maneja igual para ambos casos más abajo.
-      bool passwordOk;
-      if (user.passwordHash.isNotEmpty) {
-        final computedHash = user.passwordSalt.isNotEmpty
-            ? _hashWithSalt(password, user.passwordSalt)
-            : sha256.convert(utf8.encode(password)).toString(); // legacy sin salt
-        passwordOk = user.passwordHash == computedHash;
-        if (passwordOk) {
-          // Migración perezosa: primer login exitoso de un usuario legacy
-          // crea su cuenta de Firebase Auth con la misma password recién
-          // verificada, y el doc deja de llevar passwordHash/passwordSalt
-          // de acá en adelante (no hace falta forzar un reseteo masivo).
-          try {
-            await FirebaseAuth.instance.createUserWithEmailAndPassword(
-              email: _authEmail(key),
-              password: password,
-            );
-          } on FirebaseAuthException catch (e) {
-            // Si un login anterior ya creó la cuenta pero se interrumpió
-            // antes de limpiar el doc (ej. la app se cerró en el medio),
-            // no es un error: seguimos igual.
-            if (e.code != 'email-already-in-use') {
-              debugPrint('[auth] Error migrando a Firebase Auth ($key): $e');
-            }
-          } catch (e) {
-            debugPrint('[auth] Error migrando a Firebase Auth ($key): $e');
-          }
-          await docRef.update({
-            'passwordHash': FieldValue.delete(),
-            'passwordSalt': FieldValue.delete(),
-          });
-        }
-      } else {
-        try {
-          await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: _authEmail(key),
-            password: password,
-          );
-          passwordOk = true;
-        } on FirebaseAuthException {
-          passwordOk = false;
-        }
-      }
+      final computedHash = user.passwordSalt.isNotEmpty
+          ? _hashWithSalt(password, user.passwordSalt)
+          : sha256.convert(utf8.encode(password)).toString(); // legacy sin salt
 
-      if (!passwordOk) {
+      if (user.passwordHash != computedHash) {
         final attempts = ((userData['failedAttempts'] as num?)?.toInt() ?? 0) + 1;
         final update = <String, dynamic>{'failedAttempts': attempts};
         if (attempts >= _maxFailedAttempts) {
@@ -270,20 +204,14 @@ class LocalAuthService {
       await _box.put('logged_in_username', user.username);
       return LoginResult.success;
     } catch (e) {
-      debugPrint('[auth] Error login: ${e.runtimeType}');
+      // ignore: avoid_print
+      print('[auth] Error login: ${e.runtimeType}');
       return LoginResult.invalidCredentials;
     }
   }
 
   static Future<void> logout() async {
     await _box.delete('logged_in_username');
-    try {
-      await FirebaseAuth.instance.signOut();
-    } catch (e) {
-      // Nunca debe bloquear el logout local por un fallo de red del lado
-      // de Firebase Auth — el usuario ya quedó deslogueado de la app.
-      debugPrint('[auth] Error signOut Firebase Auth: $e');
-    }
   }
 
   static bool isLoggedIn() => _box.get('logged_in_username') != null;
@@ -361,18 +289,19 @@ class LocalAuthService {
     if (password.length < 6) return false;
 
     try {
+      final salt = _generateSalt();
       final docRef = _firestore.collection(_usersCollection).doc(key);
       // Chequeo de existencia + escritura dentro de una transacción: sin
       // esto, dos altas casi simultáneas para el mismo username pueden
       // pasar ambas el chequeo "no existe" y la segunda pisa en silencio
-      // el doc de la primera sin que nadie vea un error. La credencial ya
-      // no se guarda acá (ver más abajo) — esta transacción solo protege
-      // la unicidad del username como clave de Firestore.
+      // el hash/salt de la primera sin que nadie vea un error.
       final created = await _firestore.runTransaction<bool>((tx) async {
         final userDoc = await tx.get(docRef);
         if (userDoc.exists) return false;
         tx.set(docRef, {
           'username': key,
+          'passwordHash': _hashWithSalt(password, salt),
+          'passwordSalt': salt,
           'isActive': true,
           'isAdmin': isAdmin,
           'deviceId': null,
@@ -387,24 +316,7 @@ class LocalAuthService {
         });
         return true;
       });
-      if (!created) return false;
-
-      // El SDK de Firebase Auth no participa de transacciones de
-      // Firestore, así que esto va aparte. Si falla, no dejamos una
-      // cuenta fantasma sin forma de loguearse: se borra el doc recién
-      // creado y se informa el fallo al panel de admin.
-      try {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _authEmail(key),
-          password: password,
-        );
-        await FirebaseAuth.instance.signOut();
-      } catch (e) {
-        debugPrint('[auth] Error creando cuenta Auth para $key: $e');
-        await docRef.delete();
-        return false;
-      }
-      return true;
+      return created;
     } catch (e) {
       // Ej: permission-denied si firestore.rules no está desplegado con
       // la regla "allow create" actualizada — no lo confundas con "ya existe".

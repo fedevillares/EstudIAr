@@ -32,7 +32,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // el parpadeo de CircularProgressIndicator que provocaba la versión
   // ConsumerWidget (nueva instancia de Future en cada build call).
   late Future<DocumentSnapshot<Map<String, dynamic>>> _userFuture;
-  final _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -41,21 +40,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         .collection('users')
         .doc(widget.username)
         .get();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 300) {
-      ref.read(userPostsProvider(widget.username).notifier).loadMore();
-    }
   }
 
   @override
@@ -98,7 +82,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 final bio = user?.bio ?? '';
 
                 return CustomScrollView(
-                  controller: _scrollController,
                   slivers: [
                     SliverAppBar(
                       backgroundColor: Colors.transparent,
@@ -275,24 +258,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ),
                           );
                         }
-                        final hasMore =
-                            ref.watch(userPostsProvider(username).notifier).hasMore;
                         return SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
-                              if (index >= posts.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 24),
-                                  child: Center(
-                                    child: SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2, color: _kPurple),
-                                    ),
-                                  ),
-                                );
-                              }
                               final post = posts[index];
                               return PostCard(
                                 post: post,
@@ -301,7 +269,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 ),
                               );
                             },
-                            childCount: posts.length + (hasMore ? 1 : 0),
+                            childCount: posts.length,
                           ),
                         );
                       },

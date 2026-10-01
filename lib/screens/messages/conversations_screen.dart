@@ -3,42 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/social_providers.dart';
-import '../../widgets/skeleton_loader.dart';
 import 'chat_screen.dart';
 import 'new_conversation_screen.dart';
 
 const _kPurple = Color(0xFFA855F7);
 const _kCyan = Color(0xFF06B6D4);
 
-class ConversationsScreen extends ConsumerStatefulWidget {
+class ConversationsScreen extends ConsumerWidget {
   const ConversationsScreen({super.key});
-
-  @override
-  ConsumerState<ConversationsScreen> createState() => _ConversationsScreenState();
-}
-
-class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
-  final _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 300) {
-      ref.read(conversationsProvider.notifier).loadMore();
-    }
-  }
 
   String _formatTime(DateTime date) {
     final now = DateTime.now();
@@ -49,7 +21,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(currentUsernameProvider);
     final conversationsAsync = ref.watch(conversationsProvider);
 
@@ -95,23 +67,9 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                     );
                   }
                   return ListView.builder(
-                    controller: _scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: conversations.length +
-                        (ref.watch(conversationsProvider.notifier).hasMore ? 1 : 0),
+                    itemCount: conversations.length,
                     itemBuilder: (context, index) {
-                      if (index >= conversations.length) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: _kPurple),
-                            ),
-                          ),
-                        );
-                      }
                       final conv = conversations[index];
                       final other = me != null ? conv.otherParticipant(me) : '?';
                       final unread = me != null ? conv.unreadFor(me) : 0;
@@ -163,7 +121,7 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
                     },
                   );
                 },
-                loading: () => const ConversationSkeletonList(),
+                loading: () => const Center(child: CircularProgressIndicator(color: _kPurple)),
                 error: (err, _) {
                   debugPrint('[mensajes] error cargando conversaciones: $err');
                   return Center(

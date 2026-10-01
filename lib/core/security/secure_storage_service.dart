@@ -14,7 +14,7 @@ class SecureStorageService {
   );
 
   /// API key por defecto a inyectar en build (NO se commitea).
-  /// Uso: `flutter run --dart-define=GROQ_API_KEY=<tu-key-de-groq>`
+  /// Uso: `flutter run --dart-define=<tu-key-de-groq>
   static const _defaultApiKey =
       String.fromEnvironment('GROQ_API_KEY', defaultValue: '');
 

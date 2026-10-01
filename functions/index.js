@@ -89,29 +89,12 @@ exports.aiProxy = onRequest(
       return;
     }
 
-    // NOTA: esta función sigue sin desplegarse (plan Spark, sin Blaze) — este
-    // cambio es solo por consistencia con firestore.rules (misma derivación
-    // de username que myUsername()), no tiene efecto en runtime todavía.
-    const authHeader = req.headers.authorization || '';
-    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!idToken) {
-      res.status(401).json({error: 'unauthenticated', message: 'Falta token de autenticación.'});
+    const {username, messages, kind, temperature, maxTokens} = req.body || {};
+
+    if (typeof username !== 'string' || !username.trim()) {
+      res.status(400).json({error: 'invalid_request', message: 'Falta username.'});
       return;
     }
-
-    let username;
-    try {
-      const decoded = await admin.auth().verifyIdToken(idToken);
-      username = (decoded.email || '').split('@')[0];
-      if (!username) throw new Error('token sin email');
-    } catch (e) {
-      logger.warn('invalid_id_token', e);
-      res.status(401).json({error: 'unauthenticated', message: 'Token inválido o expirado.'});
-      return;
-    }
-
-    const {messages, kind, temperature, maxTokens} = req.body || {};
-
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({error: 'invalid_request', message: 'Falta messages.'});
       return;

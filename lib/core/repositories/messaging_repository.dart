@@ -14,32 +14,13 @@ class MessagingRepository {
   static final _db = FirebaseFirestore.instance;
   static const _maxMessageLength = 4000;
 
-  static Stream<List<Conversation>> watchConversations(String username,
-      {int limit = 100}) {
+  static Stream<List<Conversation>> watchConversations(String username) {
     return _db
         .collection('conversations')
         .where('participants', arrayContains: username)
         .orderBy('updatedAt', descending: true)
-        .limit(limit)
         .snapshots()
         .map((snap) => snap.docs.map(Conversation.fromDoc).toList());
-  }
-
-  /// Página de conversaciones con `updatedAt` más viejo que [before]
-  /// (paginación "cargar más" más allá del límite de [watchConversations]).
-  static Future<List<Conversation>> fetchOlderConversations(
-    String username, {
-    required DateTime before,
-    int limit = 20,
-  }) async {
-    final snap = await _db
-        .collection('conversations')
-        .where('participants', arrayContains: username)
-        .orderBy('updatedAt', descending: true)
-        .startAfter([Timestamp.fromDate(before)])
-        .limit(limit)
-        .get();
-    return snap.docs.map(Conversation.fromDoc).toList();
   }
 
   static Stream<List<ChatMessage>> watchMessages(String conversationId,

@@ -44,7 +44,6 @@ class AIService {
   static const _baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
   static final _cache   = <String, (String, DateTime)>{};
   static const _cacheTtl = Duration(hours: 12);
-  static const _cacheMaxEntries = 200;
 
   // ── Convierte imagen a base64 ──────────────────────────────────
   static Future<String> _imageToBase64(File file) async {
@@ -390,15 +389,7 @@ Respuesta del estudiante: $answer
             maxTokens: maxTokens,
           );
 
-    if (!skipCache) {
-      // Map preserva orden de inserción: si nos pasamos del tope, tiramos
-      // la entrada más vieja antes de agregar la nueva (evita que el
-      // cache en memoria crezca sin límite durante una sesión larga).
-      if (_cache.length >= _cacheMaxEntries) {
-        _cache.remove(_cache.keys.first);
-      }
-      _cache[cacheKey] = (content, now);
-    }
+    if (!skipCache) _cache[cacheKey] = (content, now);
     return content;
   }
 

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/social_providers.dart';
 import '../../widgets/social/post_card.dart';
 import '../../widgets/glass_card.dart';
-import '../../widgets/skeleton_loader.dart';
 import 'comments_screen.dart';
 import 'profile_screen.dart';
 import 'new_post_screen.dart';
@@ -14,38 +13,11 @@ const _kPurple = Color(0xFFA855F7);
 const _kCyan = Color(0xFF06B6D4);
 const _kGrad = LinearGradient(colors: [_kPurple, _kCyan]);
 
-class FeedScreen extends ConsumerStatefulWidget {
+class FeedScreen extends ConsumerWidget {
   const FeedScreen({super.key});
 
   @override
-  ConsumerState<FeedScreen> createState() => _FeedScreenState();
-}
-
-class _FeedScreenState extends ConsumerState<FeedScreen> {
-  final _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 300) {
-      ref.read(feedProvider.notifier).loadMore();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final feedAsync = ref.watch(feedProvider);
 
     return Scaffold(
@@ -153,25 +125,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                           await Future.delayed(const Duration(milliseconds: 400));
                         },
                         child: ListView.builder(
-                          controller: _scrollController,
                           padding: const EdgeInsets.only(top: 4, bottom: 140),
                           physics: const BouncingScrollPhysics(),
-                          itemCount: posts.length +
-                              (ref.watch(feedProvider.notifier).hasMore ? 1 : 0),
+                          itemCount: posts.length,
                           itemBuilder: (context, index) {
-                            if (index >= posts.length) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 24),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: _kPurple),
-                                  ),
-                                ),
-                              );
-                            }
                             final post = posts[index];
                             return PostCard(
                               post: post,
@@ -190,7 +147,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                         ),
                       );
                     },
-                    loading: () => const PostCardSkeletonList(),
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(color: _kPurple),
+                    ),
                     error: (err, _) {
                       debugPrint('[feed] error cargando feed: $err');
                       return Center(

@@ -36,42 +36,6 @@ class SocialRepository {
         .map((snap) => snap.docs.map(Post.fromDoc).toList());
   }
 
-  /// Página de posts más viejos que [before] (paginación "cargar más" para
-  /// llegar más allá del límite de [watchFeed]). Cursor por valor de
-  /// `createdAt` en vez de por `DocumentSnapshot`: el stream en vivo ya
-  /// entrega `Post`, no snapshots, así que no hay un doc de referencia a
-  /// mano para `startAfterDocument`.
-  static Future<List<Post>> fetchOlderPosts({
-    required DateTime before,
-    int limit = 20,
-  }) async {
-    final snap = await _db
-        .collection('posts')
-        .where('isHidden', isEqualTo: false)
-        .orderBy('createdAt', descending: true)
-        .startAfter([Timestamp.fromDate(before)])
-        .limit(limit)
-        .get();
-    return snap.docs.map(Post.fromDoc).toList();
-  }
-
-  /// Igual que [fetchOlderPosts] pero acotado a los posts de [username].
-  static Future<List<Post>> fetchOlderUserPosts(
-    String username, {
-    required DateTime before,
-    int limit = 20,
-  }) async {
-    final snap = await _db
-        .collection('posts')
-        .where('authorId', isEqualTo: username)
-        .where('isHidden', isEqualTo: false)
-        .orderBy('createdAt', descending: true)
-        .startAfter([Timestamp.fromDate(before)])
-        .limit(limit)
-        .get();
-    return snap.docs.map(Post.fromDoc).toList();
-  }
-
   /// Crea un post tras pasar la revisión de moderación. Lanza
   /// [ContentRejectedException] si el contenido es rechazado.
   static Future<void> createPost({
@@ -149,13 +113,12 @@ class SocialRepository {
   }
 
   // ── Comentarios ─────────────────────────────────────────────────
-  static Stream<List<Comment>> watchComments(String postId, {int limit = 500}) {
+  static Stream<List<Comment>> watchComments(String postId) {
     return _db
         .collection('posts')
         .doc(postId)
         .collection('comments')
         .orderBy('createdAt', descending: false)
-        .limit(limit)
         .snapshots()
         .map((snap) => snap.docs.map((d) => Comment.fromDoc(d, postId)).toList());
   }
